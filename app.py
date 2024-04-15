@@ -4,6 +4,7 @@ import streamlit as st
 import lasio as ls
 import pandas as pd
 import io
+from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -24,7 +25,7 @@ def read_las_file(u_file):
 def filter_by_range(df, column_ranges):
     filtered_df = df.copy()
     for column, (lower_limit, upper_limit) in column_ranges.items():
-        filtered_df = filtered_df.loc[(filtered_df[column] >= lower_limit) & (filtered_df[column] <= upper_limit)]
+        filtered_df = filtered_df.loc[(filtered_df[column] >= lower_limit - 0.01) & (filtered_df[column] <= upper_limit + 0.01)]
     return filtered_df
 
 # Function for data exploration
@@ -62,16 +63,33 @@ def explore_data(df):
 
     if selected_columns:
         # Remove rows with null values or impute values
-        st.write('After selecting columns, rows containing missing values has been removed')
+        remove_missing = st.checkbox('Remove rows containing missing values', value=True)
+        impute_missing = not remove_missing
 
-        df_filtered = df_filtered.dropna()
+        if remove_missing:
+            df_filtered = df_filtered.dropna()
+        else:
+            # Imputation of values
+            imputation_method = st.selectbox('Select global imputation method:', ['Mean', 'Median', 'Specific Value', 'Zero'],
+                                            help="Choose a method to fill missing values for all selected columns.")
 
-        # Display the filtered DataFrame
+            if imputation_method == 'Zero':
+                df_filtered[selected_columns] = df_filtered[selected_columns].fillna(0)
+            else:
+                for column in selected_columns:
+                    if imputation_method == 'Mean':
+                        imputer = SimpleImputer(strategy='mean')
+                        df_filtered[column] = imputer.fit_transform(df_filtered[[column]])
+                    elif imputation_method == 'Median':
+                        imputer = SimpleImputer(strategy='median')
+                        df_filtered[column] = imputer.fit_transform(df_filtered[[column]])
+                    elif imputation_method == 'Specific Value':
+                        specific_value = st.number_input(f'Enter the specific value for {column}:')
+                        df_filtered[column] = df_filtered[column].fillna(specific_value)
+
+
+
         st.title('Filter Data')
-        #st.write(df_filtered.reset_index(drop=True).head())
-        #st.subheader('Statistics')
-        #st.write(df_filtered.describe())
-
         st.subheader('Filter Values Manually')
         column_ranges = {}
         lower_limit, upper_limit = st.columns(2)
@@ -87,14 +105,8 @@ def explore_data(df):
 
         log_scale_columns = st.multiselect('Select logarithmic columns:', filtered_data.columns, key='log_scale_columns')
         if log_scale_columns:
-            #df_filtered[log_scale_columns] = df_filtered[log_scale_columns].apply(lambda x: np.log1p(x))
             for column in log_scale_columns:
                 filtered_data[column] = np.log10(filtered_data[column])
-
-
-        #st.write('Filtered Data Statistics:')
-        #st.write(filtered_data.reset_index(drop=True).head())
-        #st.write(filtered_data.describe())
 
         col1, col2 = st.columns(2)
 
@@ -277,7 +289,7 @@ def ml_models(df_filtered):
 
     model_lof = LocalOutlierFactor(contamination=contamination_lof, novelty=True)
 
-    st.markdown("Relevant columns for outlier detection:")
+    st.subheader("Column Evaluation")
     outlier_inputs = st.multiselect('Select columns:', df_filtered.columns)
 
     # Create a dictionary of our models and their names
@@ -342,7 +354,7 @@ def ml_models(df_filtered):
 
 
     else:
-        st.warning('Make a column selection')
+        st.warning('Make columns selection')
 
 
 # Config Setup
@@ -396,7 +408,7 @@ elif options == 'Scatterplots':
 
 elif options == 'ML Models':
     if u_file is None:
-        st.warning('Please upload a LAS file to view Scatter Plot.')
+        st.warning('Please upload a LAS file to view Outliers in Well Logs.')
     elif not selected_columns:
         st.warning('Select columns first.')
     else:
