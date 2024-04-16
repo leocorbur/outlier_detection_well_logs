@@ -12,7 +12,14 @@ import missingno as msno
 
 def read_las_file(u_file):
     las_file_contents = u_file.read()
-    las_file_contents_str = las_file_contents.decode("utf-8")
+    codecs_to_try = ['utf-8', 'latin1', 'ISO-8859-1']
+    for codec in codecs_to_try:
+        try:
+            las_file_contents_str = las_file_contents.decode(codec)
+            break  # Si la decodificación tiene éxito, sal del bucle
+        except UnicodeDecodeError:
+            continue  # Si hay un error, prueba con el siguiente codec
+
     las_file_buffer = io.StringIO(las_file_contents_str)
     las = ls.read(las_file_buffer)
     df = las.df()
